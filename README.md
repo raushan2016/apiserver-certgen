@@ -6,6 +6,6 @@ More details https://kubernetes.io/docs/tasks/access-kubernetes-api/setup-extens
 `make build` 
 
 ## To generate certificates 
-./bin/certgen --name <kubernetes service name> --namespace <service name namespace>
+./bin/apiserver-certgen --name <kubernetes service name> --namespace <service name namespace>
 
 `Certificates will be generated in the path ./config/certificates`
