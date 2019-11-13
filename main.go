@@ -54,20 +54,31 @@ func RunBuildResourceConfig(cmd *cobra.Command, args []string) {
 	if len(Namespace) == 0 {
 		klog.Fatalf("must specify --namespace")
 	}
-	certs := [2]string{"apiserver", "db"}
-	for _, cert := range certs {
-		dir := filepath.Join(ResourceConfigDir, cert)
-		createCerts(dir)
-		ClientKey := getBase64(filepath.Join(dir, "apiserver.key"))
-		WriteStringToFile(filepath.Join(dir, "key.txt"), ClientKey)
 
-		CACert := getBase64(filepath.Join(dir, "apiserver_ca.crt"))
-		WriteStringToFile(filepath.Join(dir, "cacrt.txt"), CACert)
+	generateAPIServerCerts(ResourceConfigDir)
+	generateDBCerts(ResourceConfigDir)
+}
 
-		ClientCert := getBase64(filepath.Join(dir, "apiserver.crt"))
-		WriteStringToFile(filepath.Join(dir, "crt.txt"), ClientCert)
-	}
+func generateAPIServerCerts(resourceConfigDir string) {
+	dir := filepath.Join(resourceConfigDir, "apiserver")
+	generateCerts(dir)
+}
 
+func generateDBCerts(resourceConfigDir string) {
+	dir := filepath.Join(resourceConfigDir, "db")
+	generateCerts(dir)
+}
+
+func generateCerts(dir string) {
+	createCerts(dir)
+	ClientKey := getBase64(filepath.Join(dir, "cert.key"))
+	WriteStringToFile(filepath.Join(dir, "key.txt"), ClientKey)
+
+	CACert := getBase64(filepath.Join(dir, "cacrt.crt"))
+	WriteStringToFile(filepath.Join(dir, "cacrt.txt"), CACert)
+
+	ClientCert := getBase64(filepath.Join(dir, "cert.crt"))
+	WriteStringToFile(filepath.Join(dir, "cert.txt"), ClientCert)
 }
 
 func WriteStringToFile(filepath, s string) error {
@@ -86,11 +97,6 @@ func WriteStringToFile(filepath, s string) error {
 }
 
 func getBase64(file string) string {
-	//out, err := exec.Command("bash", "-c",
-	//	fmt.Sprintf("base64 %s | awk 'BEGIN{ORS=\"\";} {print}'", file)).CombinedOutput()
-	//if err != nil {
-	//	klog.Fatalf("Could not base64 encode file: %v", err)
-	//}
 
 	buff := bytes.Buffer{}
 	enc := base64.NewEncoder(base64.StdEncoding, &buff)
@@ -106,21 +112,16 @@ func getBase64(file string) string {
 	enc.Close()
 	return buff.String()
 
-	//if string(out) != buff.String() {
-	//	fmt.Printf("\nNot Equal\n")
-	//}
-	//
-	//return string(out)
 }
 
 func createCerts(dir string) {
 	os.MkdirAll(dir, 0700)
 
-	if _, err := os.Stat(filepath.Join(dir, "apiserver_ca.crt")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "cacrt.crt")); os.IsNotExist(err) {
 		DoCmd("openssl", "req", "-x509",
 			"-newkey", "rsa:2048",
-			"-keyout", filepath.Join(dir, "apiserver_ca.key"),
-			"-out", filepath.Join(dir, "apiserver_ca.crt"),
+			"-keyout", filepath.Join(dir, "cacrt.key"),
+			"-out", filepath.Join(dir, "cacrt.crt"),
 			"-days", "365",
 			"-nodes",
 			"-subj", fmt.Sprintf("/C=un/ST=st/L=l/O=o/OU=ou/CN=%s-certificate-authority", Name),
@@ -129,31 +130,31 @@ func createCerts(dir string) {
 		klog.Infof("Skipping generate CA cert.  File already exists.")
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "apiserver.csr")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "cert.csr")); os.IsNotExist(err) {
 		// Use <service-Name>.<Namespace>.svc as the domain Name for the certificate
 		DoCmd("openssl", "req",
-			"-out", filepath.Join(dir, "apiserver.csr"),
+			"-out", filepath.Join(dir, "cert.csr"),
 			"-new",
 			"-newkey", "rsa:2048",
 			"-nodes",
-			"-keyout", filepath.Join(dir, "apiserver.key"),
+			"-keyout", filepath.Join(dir, "cert.key"),
 			"-subj", fmt.Sprintf("/C=un/ST=st/L=l/O=o/OU=ou/CN=%s.%s.svc", Name, Namespace),
 		)
 	} else {
-		klog.Infof("Skipping generate apiserver csr.  File already exists.")
+		klog.Infof("Skipping generate cert csr.  File already exists.")
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "apiserver.crt")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "cert.crt")); os.IsNotExist(err) {
 		DoCmd("openssl", "x509", "-req",
 			"-days", "365",
-			"-in", filepath.Join(dir, "apiserver.csr"),
-			"-CA", filepath.Join(dir, "apiserver_ca.crt"),
-			"-CAkey", filepath.Join(dir, "apiserver_ca.key"),
+			"-in", filepath.Join(dir, "cert.csr"),
+			"-CA", filepath.Join(dir, "cacrt.crt"),
+			"-CAkey", filepath.Join(dir, "cacrt.key"),
 			"-CAcreateserial",
-			"-out", filepath.Join(dir, "apiserver.crt"),
+			"-out", filepath.Join(dir, "cert.crt"),
 		)
 	} else {
-		klog.Infof("Skipping signing apiserver crt.  File already exists.")
+		klog.Infof("Skipping signing cert crt.  File already exists.")
 	}
 }
 
